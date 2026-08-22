@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<!--
+  The morning-after page.
+
+  Reading order is the design, and it is inverted from the obvious one:
+
+    1. the run banner   -- are these numbers still moving?
+    2. exceptions       -- what needs me?
+    3. clients          -- how are we doing?
+
+  Every dashboard instinct says put the totals first. At 7 a.m. on 1 February that is the
+  wrong order. The staff member is not there to admire progress; they are there to find
+  the four things a machine could not finish, and they have to find them before they have
+  read anything reassuring. Progress tiles sit between the two, small, because they
+  answer a question that is real but second.
+
+  No pagination anywhere. 500 rows is 60 KB of HTML and staff want Ctrl-F; a paginated
+  table hides the one client they came in to look at behind a control they have to
+  discover. The filter box below is additive -- it narrows, it never conceals.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Crude on purpose. A polling fetch with diffing would be nicer and would introduce a
+    class of bug where the page shows numbers from two different instants. A whole-page
+    reload cannot do that: what you see was true, all together, at the timestamp printed
+    in the header.
+  -->
+  <meta http-equiv="refresh" content="30">
+  <title th:text="'1099 readiness — ' + ${firm} + ' — ' + ${taxYear}">1099 readiness</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header class="page">
+  <div class="wrap">
+    <h1 th:text="'1099-NEC filing readiness — tax year ' + ${taxYear}">1099-NEC filing readiness</h1>
+    <div class="meta">
+      <b th:text="${user}">Dana</b> <span th:text="'(' + ${role} + ')'">(role)</span>
+      · firm <b th:text="${firm}">northstar</b>
+      · as of <b th:text="${asOf}">—</b>
+      · filing deadline <b th:text="${#temporals.format(deadline, 'EEEE d MMMM yyyy')}">—</b>
+      · <form method="post" th:action="@{/logout}" style="display:inline">
+          <button type="submit"
+                  style="background:none;border:0;padding:0;font:inherit;color:#9fc4f0;cursor:pointer;text-decoration:underline">sign out</button>
+        </form>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!--
+    Shown only while batches are actually in flight. A permanent "data may be stale"
+    disclaimer is worse than none: it is ignored within a day and then it is decoration.
+  -->
+  <div class="banner" th:if="${runInProgress}">
+    <b>A filing run is in progress.</b>
+    <span th:text="${activity.dispatched} + ' batch(es) dispatched and ' + ${activity.sealed} + ' sealed as of the timestamp above.'">…</span>
+    These counts are moving. Refresh before acting on a number that looks final.
+  </div>
+
+  <div class="banner" th:if="${activity.needs_reconcile > 0}">
+    <b th:text="${activity.needs_reconcile} + ' batch(es) awaiting reconciliation.'">…</b>
+    The process restarted while these were in flight, so whether the IRS holds them is not
+    yet known. Nothing new is submitted for this firm until that question is answered.
+  </div>
+
+  <!-- ===================================================================== EXCEPTIONS -->
+  <!--
+    ABOVE the client table, deliberately. See the note at the top of this file.
+  -->
+  <section>
+    <h2>
+      Needs a person
+      <span class="note" th:if="${!exceptionGroups.isEmpty()}"
+            th:text="'— ' + ${exceptionTotal} + ' open, most consequential first'">…</span>
+    </h2>
+
+    <p class="explain">
+      Ordered by what each one can cost, not by how many there are or how recent they are.
+      A reconciliation discrepancy risks a duplicate or a missed filing — real money and
+      penalties — so it sorts above an IRS rejection, which sorts above missing paperwork.
+      Every row here is derived live from current state: when the underlying condition
+      clears, the row disappears on the next refresh with no job in between.
+    </p>
+
+    <div class="panel">
+      <div class="empty" th:if="${exceptionGroups.isEmpty()}">
+        Nothing is waiting on a person. Every filing is either accepted or still progressing.
+      </div>
+
+      <table th:unless="${exceptionGroups.isEmpty()}">
+        <thead>
+          <tr>
+            <th style="width:2.6rem">Sev</th>
+            <th>Condition</th>
+            <th class="num" style="width:5rem">Count</th>
+            <th style="width:11rem">Oldest</th>
+            <th>What it means</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="g : ${exceptionGroups}">
+            <td><span class="sev" th:classappend="'s' + ${g.severity}" th:text="${g.severity}">5</span></td>
+            <td class="mono" th:text="${g.code}">CODE</td>
+            <td class="num" th:text="${g.count}">0</td>
+            <td class="dim" th:text="${g.oldest_display}">—</td>
+            <td class="dim" th:text="${explain.get(g.code)} ?: 'See the individual items below.'">…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================================================================ EXCEPTION DETAIL -->
+  <section th:if="${!exceptions.isEmpty()}">
+    <h2>
+      Individual items
+      <span class="note"
+            th:text="'— showing ' + ${exceptions.size()} + ' of ' + ${exceptionTotal}">…</span>
+    </h2>
+
+    <div class="filter-row">
+      <input class="filter" id="exFilter" type="search" placeholder="Filter items — client, code, id…"
+             autocomplete="off">
+      <span class="filter-count" id="exCount"></span>
+    </div>
+
+    <p class="explain" th:if="${exceptionsTruncated}">
+      This list is capped. The grouped counts above are complete — the cap applies only to
+      the individual rows, and it is stated here rather than left to be inferred from a
+      list that stops.
+    </p>
+
+    <div class="panel">
+      <table id="exTable">
+        <thead>
+          <tr>
+            <th style="width:2.6rem">Sev</th>
+            <th style="width:15rem">Condition</th>
+            <th style="width:16rem">Client</th>
+            <th style="width:9.5rem">First seen</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="e : ${exceptions}">
+            <td><span class="sev" th:classappend="'s' + ${e.severity}" th:text="${e.severity}">5</span></td>
+            <td class="mono" th:text="${e.code}">CODE</td>
+            <td>
+              <a class="client" th:if="${e.client_id != null}"
+                 th:href="@{'/client/' + ${e.client_id}(taxYear=${taxYear})}"
+                 th:text="${e.client_name}">client</a>
+              <span class="dim" th:if="${e.client_id == null}">— firm-wide —</span>
+            </td>
+            <td class="dim" th:text="${e.first_seen_display}">—</td>
+            <td>
+              <span th:if="${e.acked_by != null}" class="dim"
+                    th:text="'seen by ' + ${e.acked_by} + (${e.note} != null ? ' — ' + ${e.note} : '')">…</span>
+              <details class="detail">
+                <summary th:text="${e.entity_type} + ' ' + ${e.entity_id}">entity</summary>
+                <pre th:text="${e.detail_text}">{}</pre>
+                <!--
+                  Acknowledging records that a person has SEEN this. It deliberately does
+                  not hide the row: the exception is derived from live state and goes away
+                  when the condition is actually fixed. An "acknowledged" that also
+                  suppressed would let a busy morning empty this page with nothing resolved.
+                -->
+                <form method="post" th:action="@{/exception/ack}" style="margin-top:.4rem">
+                  <input type="hidden" name="dedupeKey" th:value="${e.dedupe_key}">
+                  <input type="hidden" name="taxYear" th:value="${taxYear}">
+                  <input type="text" name="note" class="filter" style="max-width:20rem"
+                         placeholder="note — chased W-9, called client…"
+                         th:value="${e.note}">
+                  <button type="submit" style="font:inherit;padding:.3rem .6rem">mark seen</button>
+                </form>
+              </details>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================================================================== PROGRESS -->
+  <section>
+    <h2>Progress</h2>
+
+    <div class="tiles">
+      <div class="tile attention">
+        <div class="n" th:text="${statusCounts.needs_attention}">0</div>
+        <div class="label">Need attention</div>
+        <div class="sub">clients with a blocked or rejected form, or an open exception</div>
+      </div>
+      <div class="tile awaiting">
+        <div class="n" th:text="${statusCounts.awaiting_irs} + ${statusCounts.partially_filed}">0</div>
+        <div class="label">Awaiting the IRS</div>
+        <!--
+          "Submitted, awaiting confirmation" — never "not filed". A filing sitting in
+          SUBMITTED_UNACKNOWLEDGED at 23:59 on 2 February is filed on time; the wait is
+          the IRS's clock, not ours. Rendering that as "not filed" is precisely how this
+          page could get someone to re-send a live filing.
+        -->
+        <div class="sub">submitted, confirmation not yet returned</div>
+      </div>
+      <div class="tile filed">
+        <div class="n" th:text="${statusCounts.fully_filed}">0</div>
+        <div class="label">Fully filed</div>
+        <div class="sub">every form for the client accepted by the IRS</div>
+      </div>
+      <div class="tile ready">
+        <div class="n" th:text="${statusCounts.ready_to_file}">0</div>
+        <div class="label">Ready to file</div>
+        <div class="sub">determined and clean; the IRS has nothing yet</div>
+      </div>
+      <div class="tile">
+        <div class="n" th:text="${statusCounts.nothing_to_file}">0</div>
+        <div class="label">Nothing to file</div>
+        <div class="sub">no vendor reaches the reporting threshold</div>
+      </div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile filed">
+        <div class="n" th:text="${totals.accepted}">0</div>
+        <div class="label">Forms accepted</div>
+      </div>
+      <div class="tile awaiting">
+        <div class="n" th:text="${totals.awaiting} + ${totals.batched}">0</div>
+        <div class="label">Forms in flight</div>
+        <div class="sub" th:text="${totals.awaiting} + ' submitted · ' + ${totals.batched} + ' sealed into a batch'">…</div>
+      </div>
+      <div class="tile attention">
+        <div class="n" th:text="${totals.rejected} + ${totals.blocked}">0</div>
+        <div class="label">Forms stopped</div>
+        <div class="sub" th:text="${totals.rejected} + ' rejected by the IRS · ' + ${totals.blocked} + ' blocked before send'">…</div>
+      </div>
+      <div class="tile ready">
+        <div class="n" th:text="${totals.ready}">0</div>
+        <div class="label">Forms not yet sent</div>
+      </div>
+      <div class="tile">
+        <div class="n" th:text="${totals.total}">0</div>
+        <div class="label">Forms total</div>
+        <div class="sub" th:text="'tax year ' + ${taxYear}">…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================== CLIENTS -->
+  <section>
+    <h2>
+      Clients
+      <span class="note" th:text="'— ' + ${clients.size()} + ' in this firm, worst first'">…</span>
+    </h2>
+
+    <p class="explain">
+      Sorted by how much trouble the client is in, not alphabetically — the top of this
+      table is the work queue. Status is evaluated in priority order and the first match
+      wins, so “needs attention” outranks everything: a client holding one rejected form
+      is never shown as partially filed, however much else went right.
+    </p>
+
+    <div class="filter-row">
+      <input class="filter" id="clFilter" type="search" placeholder="Filter clients — name, reference, status…"
+             autocomplete="off">
+      <span class="filter-count" id="clCount"></span>
+    </div>
+
+    <div class="panel">
+      <div class="empty" th:if="${clients.isEmpty()}">
+        No clients for tax year <span th:text="${taxYear}">—</span>. Run <span class="mono">import</span> first.
+      </div>
+
+      <table th:unless="${clients.isEmpty()}" id="clTable">
+        <thead>
+          <tr>
+            <th style="width:9.5rem">Status</th>
+            <th>Client</th>
+            <th style="width:6.5rem">Ref</th>
+            <th class="num" style="width:4.2rem">Forms</th>
+            <th class="num" style="width:5rem">Accepted</th>
+            <th class="num" style="width:5rem">In flight</th>
+            <th class="num" style="width:4.6rem">Stopped</th>
+            <th class="num" style="width:5.4rem">Attention</th>
+            <th class="num" style="width:7.5rem">Reported</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="c : ${clients}">
+            <td><span class="pill" th:classappend="${c.status}"
+                      th:text="${#strings.replace(c.status, '_', ' ')}">STATUS</span></td>
+            <td>
+              <a class="client" th:href="@{'/client/' + ${c.client_id}(taxYear=${taxYear})}"
+                 th:text="${c.legal_name}">Client</a>
+            </td>
+            <td class="mono dim" th:text="${c.client_ref}">REF</td>
+            <td class="num" th:text="${c.n_total}" th:classappend="${c.n_total == 0} ? ' zero'">0</td>
+            <td class="num" th:text="${c.n_accepted}" th:classappend="${c.n_accepted == 0} ? ' zero'">0</td>
+            <td class="num" th:text="${c.n_awaiting + c.n_batched}"
+                th:classappend="${c.n_awaiting + c.n_batched == 0} ? ' zero'">0</td>
+            <td class="num" th:text="${c.n_rejected + c.n_blocked}"
+                th:classappend="${c.n_rejected + c.n_blocked == 0} ? ' zero'">0</td>
+            <td class="num" th:text="${c.n_attention}" th:classappend="${c.n_attention == 0} ? ' zero'">0</td>
+            <!--
+              Money accepted only. Deliberately not "money at stake" or a projected total:
+              a figure that mixes confirmed and hoped-for is the kind of number someone
+              quotes to a client.
+            -->
+            <td class="num" th:text="${c.accepted_display}"
+                th:classappend="${c.accepted_cents == 0} ? ' zero'">0.00</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="explain">
+    Every figure on this page was read inside a single <span class="mono">REPEATABLE READ</span>
+    transaction, so the tiles, the exception list and the client table all describe the same
+    instant — the one printed in the header. Nothing here is cached or precomputed.
+  </p>
+
+</div>
+
+<script>
+/*
+ * Two filter boxes, no dependencies. Row-level text matching over what is already in the
+ * DOM: the whole table is server-rendered, so filtering can never disagree with the data
+ * or fetch a second, later snapshot of it.
+ */
+(function () {
+  function wire(inputId, tableId, countId, noun) {
+    var input = document.getElementById(inputId);
+    var table = document.getElementById(tableId);
+    var count = document.getElementById(countId);
+    if (!input || !table) return;
+
+    var rows = Array.prototype.slice.call(table.tBodies[0].rows);
+    var haystacks = rows.map(function (r) { return r.textContent.toLowerCase(); });
+
+    function apply() {
+      var q = input.value.trim().toLowerCase();
+      var shown = 0;
+      for (var i = 0; i < rows.length; i++) {
+        var hit = q === '' || haystacks[i].indexOf(q) !== -1;
+        rows[i].style.display = hit ? '' : 'none';
+        if (hit) shown++;
+      }
+      count.textContent = q === ''
+        ? rows.length + ' ' + noun
+        : shown + ' of ' + rows.length + ' ' + noun + ' match';
+    }
+
+    input.addEventListener('input', apply);
+    apply();
+  }
+
+  wire('clFilter', 'clTable', 'clCount', 'clients');
+  wire('exFilter', 'exTable', 'exCount', 'items');
+})();
+</script>
+
+</body>
+</html>

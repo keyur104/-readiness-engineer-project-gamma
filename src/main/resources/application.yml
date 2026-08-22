@@ -1,0 +1,142 @@
+spring:
+  application:
+    name: readiness
+
+  # The runtime pool connects as readiness_app: owns nothing, no BYPASSRLS.
+  # RlsGuard refuses to start the app if that is ever not true.
+  datasource:
+    url: jdbc:postgresql://localhost:5432/readiness
+    username: readiness_app
+    password: ${APP_DB_PASSWORD:readiness_app_dev}
+    hikari:
+      pool-name: app
+      maximum-pool-size: 16
+      # Accidental non-transactional use becomes visible rather than silent: with
+      # auto-commit off, a query outside a transaction has no firm context and
+      # app.current_firm_id() raises 28000 instead of quietly returning nothing.
+      auto-commit: false
+      # Deliberately NO connection-init-sql and NO reset SQL. Firm context is set
+      # with set_config(..., is_local => true), which Postgres unwinds at COMMIT or
+      # ROLLBACK. Adding a belt-and-braces reset here would imply the primary
+      # mechanism is not trusted. FirmIsolationIT pins the behaviour instead.
+
+  # Migrations run as the table OWNER, which is a different role from the runtime pool.
+  flyway:
+    enabled: true
+    url: jdbc:postgresql://localhost:5432/readiness
+    user: readiness_owner
+    password: ${OWNER_DB_PASSWORD:readiness_owner_dev}
+    schemas: app
+    default-schema: app
+    locations: classpath:db/migration
+    # db/setup.sql deliberately pre-seeds schema `app` with the auto_enable_rls() function
+    # and its event trigger -- both need superuser, so they cannot live in a migration.
+    # Flyway therefore finds a non-empty schema on first run and refuses to proceed
+    # without a baseline. Baselining at 0 means every V1+ migration still runs.
+    baseline-on-migrate: true
+    baseline-version: 0
+
+  thymeleaf:
+    cache: false
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.soraban.readiness: INFO
+    # Never raise this outside a scratch database: it prints bound parameters,
+    # and bound parameters include TINs.
+    org.hibernate.orm.jdbc.bind: OFF
+
+readiness:
+  tax-year: 2025
+  # "$600 or more" is inclusive. Integer cents, so there is no epsilon to discuss.
+  threshold-cents: 60000
+
+  tin:
+    # Base64, 32 bytes each. Dev defaults exist so the project runs straight after clone;
+    # both come from the environment in any real deployment, and neither is ever written
+    # to a committed config file.
+    #
+    # Two SEPARATE keys on purpose: compromising the blind-index key (which must be
+    # present for every GROUP BY, and is therefore the more exposed of the two) must not
+    # decrypt anything.
+    active-key-version: 1
+    keys:
+      # Version-keyed so rotation is a background re-encrypt rather than a cutover:
+      # add version 2, flip active-key-version, and version 1 rows keep decrypting
+      # until a sweep rewrites them.
+      1: ${READINESS_TIN_KEY:ZGV2LW9ubHktdGluLWtleS0wMTIzNDU2Nzg5YWJjZGU=}
+    blind-index-key: ${READINESS_BIDX_KEY:ZGV2LW9ubHktYmlkeC1rZXktMDEyMzQ1Njc4OWFiY2Q=}
+
+  import:
+    # Per-row skipping is correct; wholesale skipping is not. A misdetected dialect
+    # that quietly imports 3% of a file is a far worse outcome than a loud failure.
+    max-rejection-rate: 0.05
+    copy-buffer-chars: 262144
+
+irs:
+  client: stub
+
+  rate:
+    # 20 calls per rolling 60 seconds per firm, shared across submissions AND status
+    # calls. Enforced as a sliding-window log in Postgres, consumed inside the same
+    # transaction as the state change.
+    limit: 20
+    window: 60s
+    # How much wider we count than the budget we promise. We stamp a token when it is
+    # CONSUMED; the endpoint stamps the call when it ARRIVES, always later and by a variable
+    # amount -- so a call that has just aged out on our clock may still be inside theirs. A
+    # real run produced 21 calls in one of the stub's 60s windows, the oldest 59.982s before
+    # the newest: we were 18ms optimistic. Counting over 61.2s makes the promise hold on the
+    # only clock that can throttle us. Proportional, so the test profile's 500ms window is
+    # not swamped by a fixed margin.
+    safety-margin-ratio: 0.02
+    # Absolute floor on that margin. Jitter is measured in milliseconds regardless of how big
+    # the window is, so a pure ratio collapses to nothing when the window is small -- which is
+    # exactly where the violation reappeared.
+    safety-margin-floor: 250ms
+
+  submit:
+    max-filings-per-batch: 100
+
+  poll:
+    initial-delay: 10s      # the stub's minimum ack delay; no point asking sooner
+    max-interval: 15m       # cap the interval, never the count
+    backoff-multiplier: 2.0
+    # Strict priority would starve polling entirely and leave the morning-after page
+    # blank all night, which defeats its purpose. Reserve a floor for status calls.
+    reserved-share: 0.20
+
+  unack-threshold: 30m      # surface to a human past this; polling continues regardless
+  max-attempts: 5           # exhausting these raises an attention item, NOT a terminal state
+  reconcile-strategy: REDISPATCH_SAME_KEY
+
+  http:
+    read-timeout: 60s       # generous: a client timeout shorter than server processing
+                            # manufactures indeterminate batches at scale
+
+  stub:
+    seed: 42
+    failure-mode-a-rate: 0.07   # fails before anything is recorded; retry is safe
+    failure-mode-b-rate: 0.05   # records everything, THEN returns an error
+    latency:
+      min: 0ms
+      max: 0ms
+    ack-delay:
+      min: 10s
+      max: 30s
+    ack-never-rate: 0.0
+    idempotent-replay: true     # set false to prove we survive a non-deduping endpoint
+    enforce-rate-limit: true    # the stub is an independent oracle for the budget
+    rate-window: 60s            # the brief's rolling window; tests compress it in step
+                                # with irs.rate.window so both sides judge the same span
+    reject-rules: true
+    hang-on-call-number: null   # test hook
+    hang-duration: 10s

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!--
+  Deliberately says nothing about whether the thing asked for exists somewhere else.
+
+  A client id belonging to another firm is not visible to this session at all -- row-level
+  security makes the row genuinely absent, so this page cannot distinguish "another firm's
+  client" from "a typo", and neither can whoever is reading it. That is the whole value of
+  enforcing isolation in the database rather than in a controller: there is no branch here
+  that could leak the difference, because the information never reached the process.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Not found</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header class="page">
+  <div class="wrap">
+    <h1>Nothing to show</h1>
+    <div class="meta"><a href="/">&larr; back to the dashboard</a></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="empty" th:text="${message} ?: 'That page does not exist.'">Not found.</div>
+  </div>
+</div>
+
+</body>
+</html>

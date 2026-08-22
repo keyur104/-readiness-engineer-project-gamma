@@ -1,0 +1,41 @@
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Generated seed corpora: ~140MB of CSV, fully reproducible from `seed --seed=42`.
+data/
+*.csv.gz
+
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+.env
+*.log
+logs/
+
+# Additional generated corpora. Same reasoning as data/: reproducible from the seed.
+data-*/
+
+# Pinned audit chain heads. Deliberately NOT committed: the whole point is that this file
+# lives outside anything the application can rewrite, and a copy in the repository would be
+# a copy the application's own deploy pipeline can rewrite. In production this is WORM
+# storage; locally it is a file you keep, not a file you version.
+audit-heads.txt
+
+# Working notes and recording scripts. Kept locally, deliberately not submitted: they are
+# scaffolding for building and demoing the project, not part of the system being reviewed.
+# The deliverables are README.md, WRITEUP.md, docs/DECISIONS.md, and docs/CRASH_POINTS.md.
+PLAN.md
+PROGRESS.md
+docs/DEMO.md
+docs/DEMO_STEPS.md
+docs/VIDEO_OUTLINE.md
+
+# Per-file, per-method map. Duplicates the javadoc it describes, so it drifts; the code and
+# README carry the same information without a second copy to keep honest.
+docs/CODE_MAP.md

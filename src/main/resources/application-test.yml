@@ -1,0 +1,46 @@
+# Test profile. Points at the readiness_test database created by db/setup.sql.
+#
+# Note what is NOT here: no clock mocking and no mocked rate limiter. Everything the
+# tests need to hurry is already configuration, so the real limiter, the real backoff
+# policy, and the real reconciliation code run in every test -- just scaled down.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/readiness_test
+    username: readiness_app
+    password: ${APP_DB_PASSWORD:readiness_app_dev}
+    hikari:
+      pool-name: app-test
+      maximum-pool-size: 8
+      auto-commit: false
+
+  flyway:
+    url: jdbc:postgresql://localhost:5432/readiness_test
+    user: readiness_owner
+    password: ${OWNER_DB_PASSWORD:readiness_owner_dev}
+    clean-disabled: false
+
+irs:
+  rate:
+    # Same limit, 100x shorter window: the sliding-window log code under test is
+    # identical, it just resolves in milliseconds.
+    limit: 20
+    window: 600ms
+
+  poll:
+    initial-delay: 10ms
+    max-interval: 200ms
+
+  unack-threshold: 1s
+  max-attempts: 3
+
+  stub:
+    # Deterministic by default. Individual tests dial specific failures in via the
+    # seed/key/attempt hash, so a scenario is a fixture rather than a coin flip.
+    failure-mode-a-rate: 0.0
+    failure-mode-b-rate: 0.0
+    latency:
+      min: 0ms
+      max: 0ms
+    ack-delay:
+      min: 0ms
+      max: 0ms

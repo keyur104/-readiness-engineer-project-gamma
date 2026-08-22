@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logging is deliberately plain and greppable rather than pretty.
+
+  Every phase of every long-running operation emits one structured key=value line with a
+  fixed shape, so that timings survive the terminal scrollback and can be parsed:
+
+    phase=copy      run=1042 firm=northstar rows=500123 ms=5411  rows_per_sec=92445
+    phase=IMPORT    run=1042 firm=northstar rows=500123 rejected=4021 ms=34902 sla=120000 OK
+    phase=DETERMINE run=77   firm=northstar mode=FULL clients=250 forms=6211 ms=27310 sla=60000 OK
+
+  The same numbers are also persisted to import_run / determination_run, because the
+  brief asks for timings and a console line is not a durable artifact.
+-->
+<configuration>
+
+  <!--
+    TIN redaction, applied to both the message and any stack trace.
+
+    This is a backstop, NOT the primary control. Tin.toString() renders masked by
+    default, the ledger table stores no plaintext TIN at all, and Postgres is configured
+    with log_parameter_max_length=0 so bind values never reach the server log. This
+    catches what those miss: a TIN pasted in by hand, one arriving inside third-party
+    exception text, or a raw CSV line echoed during import debugging.
+  -->
+  <conversionRule conversionWord="maskedMsg"
+                  class="com.soraban.readiness.security.TinMaskingConverter"/>
+  <conversionRule conversionWord="maskedEx"
+                  class="com.soraban.readiness.security.TinMaskingThrowableConverter"/>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{28} : %maskedMsg%n%maskedEx</pattern>
+    </encoder>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+
+  <logger name="com.soraban.readiness" level="INFO"/>
+
+  <!--
+    Never raise this outside a scratch database: it prints bound parameters, and bound
+    parameters include TINs. Left here explicitly so that turning it on is a deliberate,
+    visible act rather than something someone discovers by accident.
+  -->
+  <logger name="org.hibernate.orm.jdbc.bind" level="OFF"/>
+
+  <!-- Flyway is chatty at DEBUG and says nothing useful at INFO beyond the version list. -->
+  <logger name="org.flywaydb" level="INFO"/>
+</configuration>

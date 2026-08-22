@@ -1,0 +1,158 @@
+/*
+ * One stylesheet, no framework, no build step.
+ *
+ * "Functional beats pretty" in the brief is not permission to be unreadable -- a page a
+ * tired person misreads at 7 a.m. has failed at being truthful, whatever the data says.
+ * So: high contrast, one accent colour per meaning, and status colours that survive the
+ * two most common forms of colour blindness because the WORD is always present next to
+ * the swatch. Colour is never the only carrier of meaning on this page.
+ */
+
+:root {
+  --ink:        #16191d;
+  --ink-soft:   #5b636e;
+  --rule:       #d8dce2;
+  --panel:      #ffffff;
+  --page:       #f4f5f7;
+
+  --attention:  #b3261e;   /* needs a person, now */
+  --awaiting:   #8a6d00;   /* in flight, not our move */
+  --filed:      #1c6b3a;   /* done */
+  --ready:      #1e4f8a;   /* our move, not yet made */
+  --idle:       #6b7280;   /* nothing to do */
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 0 4rem;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 1.25rem; }
+
+/* ---------------------------------------------------------------- header */
+
+header.page {
+  background: var(--ink);
+  color: #fff;
+  padding: 1rem 0 1.1rem;
+  margin-bottom: 1.25rem;
+}
+header.page h1 { margin: 0 0 .2rem; font-size: 1.15rem; font-weight: 600; letter-spacing: .01em; }
+header.page .meta { color: #b9c0cb; font-size: .82rem; }
+header.page .meta b { color: #fff; font-weight: 600; }
+header.page a { color: #9fc4f0; }
+
+/* The run banner. Deliberately loud: a figure read during an active run has a shelf
+   life, and the reader has to know that before they act on it. */
+.banner {
+  background: #fff5d6;
+  border: 1px solid #e0c96a;
+  border-left: 4px solid #b38b00;
+  padding: .6rem .8rem;
+  margin-bottom: 1.1rem;
+  font-size: .86rem;
+}
+
+/* ---------------------------------------------------------------- tiles */
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: .7rem; margin-bottom: 1.5rem; }
+
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--idle);
+  border-radius: 3px;
+  padding: .7rem .8rem .75rem;
+}
+.tile .n     { font-size: 1.7rem; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile .label { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); margin-top: .15rem; }
+.tile .sub   { font-size: .76rem; color: var(--ink-soft); margin-top: .35rem; }
+
+.tile.attention { border-top-color: var(--attention); } .tile.attention .n { color: var(--attention); }
+.tile.awaiting  { border-top-color: var(--awaiting);  } .tile.awaiting  .n { color: var(--awaiting); }
+.tile.filed     { border-top-color: var(--filed);     } .tile.filed     .n { color: var(--filed); }
+.tile.ready     { border-top-color: var(--ready);     } .tile.ready     .n { color: var(--ready); }
+
+/* ---------------------------------------------------------------- sections */
+
+section { margin-bottom: 1.9rem; }
+section > h2 {
+  font-size: .8rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-soft); margin: 0 0 .55rem; font-weight: 700;
+}
+section > h2 .note { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink-soft); }
+
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; overflow-x: auto; }
+
+/* ---------------------------------------------------------------- tables */
+
+table { border-collapse: collapse; width: 100%; font-size: .855rem; }
+th {
+  text-align: left; font-weight: 600; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .045em; color: var(--ink-soft);
+  padding: .5rem .7rem; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  background: #fafbfc; position: sticky; top: 0;
+}
+td { padding: .42rem .7rem; border-bottom: 1px solid #eef0f3; vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: #f7f9fb; }
+
+.num  { text-align: right; font-variant-numeric: tabular-nums; }
+.zero { color: #b6bcc5; }          /* a real zero, greyed -- never used for "unknown" */
+.mono { font-family: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace; font-size: .8rem; }
+.dim  { color: var(--ink-soft); }
+
+/* ---------------------------------------------------------------- status pills */
+
+.pill {
+  display: inline-block; padding: .1rem .45rem; border-radius: 2px;
+  font-size: .7rem; font-weight: 700; letter-spacing: .03em; white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.pill.NEEDS_ATTENTION { color: var(--attention); background: #fdeceb; }
+.pill.AWAITING_IRS    { color: var(--awaiting);  background: #fdf6e0; }
+.pill.PARTIALLY_FILED { color: var(--awaiting);  background: #fdf6e0; }
+.pill.FULLY_FILED     { color: var(--filed);     background: #e9f5ee; }
+.pill.READY_TO_FILE   { color: var(--ready);     background: #eaf1f9; }
+.pill.NOTHING_TO_FILE { color: var(--idle);      background: #f0f1f3; }
+
+.sev { display: inline-block; width: 1.35rem; text-align: center; border-radius: 2px;
+       font-size: .7rem; font-weight: 700; padding: .1rem 0; }
+.sev.s1, .sev.s2, .sev.s3 { color: #fff; background: var(--attention); }
+.sev.s4, .sev.s5          { color: var(--attention); background: #fdeceb; border: 1px solid currentColor; }
+.sev.s6, .sev.s7          { color: var(--ink-soft); background: #f0f1f3; border: 1px solid var(--rule); }
+
+/* ---------------------------------------------------------------- filter */
+
+.filter {
+  width: 100%; max-width: 340px; padding: .38rem .55rem;
+  border: 1px solid var(--rule); border-radius: 3px; font: inherit; background: #fff;
+}
+.filter-row { display: flex; align-items: baseline; gap: .8rem; margin-bottom: .55rem; flex-wrap: wrap; }
+.filter-count { font-size: .78rem; color: var(--ink-soft); }
+
+/* ---------------------------------------------------------------- misc */
+
+a.client { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); }
+a.client:hover { border-bottom-color: var(--ink); }
+
+.empty { padding: 1.4rem .8rem; color: var(--ink-soft); text-align: center; font-style: italic; }
+
+.explain { font-size: .78rem; color: var(--ink-soft); margin: .3rem 0 .75rem; max-width: 76ch; }
+
+details.detail summary { cursor: pointer; color: var(--ink-soft); font-size: .78rem; }
+details.detail pre {
+  margin: .35rem 0 0; padding: .45rem .6rem; background: #f7f8fa;
+  border: 1px solid var(--rule); border-radius: 2px; font-size: .74rem;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* Subtraction chain on the client page: gross -> exclusions -> reportable. */
+.chain { font-size: .8rem; }
+.chain .op { color: var(--ink-soft); }
+.chain .result { font-weight: 600; }

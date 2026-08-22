@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<!--
+  One client, fully explained.
+
+  This page exists to answer the question a CPA actually asks when they disagree with a
+  number: "why is Box 1 $650 when I paid them $2,400?" The answer it gives is the
+  subtraction, not the total — gross, then each exclusion with its own line, then the
+  reportable figure — and under each vendor, every individual payment with the reason it
+  did or did not count.
+
+  Nothing here is recomputed for display. The dispositions were written by the same query
+  that produced the totals, so the explanation and the number it explains are two columns
+  of one row and cannot drift apart. If the rules change later, this page shows what was
+  decided, not what the current rules would decide — which is the version that matters
+  when a penalty notice arrives.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${client.legal_name} + ' — 1099 detail'">Client detail</title>
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    .vendor { border-bottom: 1px solid var(--rule); }
+    .vendor:last-child { border-bottom: 0; }
+    .vendor > summary {
+      cursor: pointer; padding: .55rem .75rem; list-style: none;
+      display: grid; grid-template-columns: 1fr 7rem 8rem 9rem; gap: .6rem; align-items: baseline;
+    }
+    .vendor > summary::-webkit-details-marker { display: none; }
+    .vendor > summary:hover { background: #f7f9fb; }
+    .vendor > summary .name { font-weight: 600; }
+    .vendor > summary .amt { text-align: right; font-variant-numeric: tabular-nums; }
+    .vendor .body { padding: .2rem .75rem 1rem; background: #fbfcfd; }
+    .subtract { margin: .5rem 0 .9rem; font-size: .83rem; max-width: 42rem; }
+    .subtract td { padding: .13rem .5rem; border: 0; }
+    .subtract td.k { color: var(--ink-soft); }
+    .subtract td.v { text-align: right; font-variant-numeric: tabular-nums; width: 8rem; }
+    .subtract tr.total td { border-top: 1px solid var(--rule); font-weight: 600; padding-top: .3rem; }
+    .badge { font-size: .7rem; font-weight: 700; letter-spacing: .03em; padding: .08rem .35rem;
+             border: 1px solid currentColor; border-radius: 2px; }
+    .badge.yes { color: var(--filed); background: #e9f5ee; }
+    .badge.no  { color: var(--idle);  background: #f0f1f3; }
+    .badge.stop{ color: var(--attention); background: #fdeceb; }
+    tr.excluded td { color: var(--ink-soft); }
+  </style>
+</head>
+<body>
+
+<header class="page">
+  <div class="wrap">
+    <h1 th:text="${client.legal_name}">Client</h1>
+    <div class="meta">
+      <a th:href="@{/(taxYear=${taxYear})}">&larr; all clients</a>
+      · ref <b th:text="${client.client_ref}">REF</b>
+      · tax year <b th:text="${taxYear}">2025</b>
+      · firm <b th:text="${firm}">northstar</b>
+      · <b th:text="${user}">Dana</b>
+      · as of <b th:text="${asOf}">—</b>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section>
+    <div class="tiles">
+      <div class="tile" th:classappend="${client.status == 'NEEDS_ATTENTION'} ? ' attention'
+                                       : (${client.status == 'FULLY_FILED'} ? ' filed'
+                                       : (${client.status == 'READY_TO_FILE'} ? ' ready' : ' awaiting'))">
+        <div class="n" style="font-size:1rem;padding:.35rem 0">
+          <span class="pill" th:classappend="${client.status}"
+                th:text="${#strings.replace(client.status, '_', ' ')}">STATUS</span>
+        </div>
+        <div class="label">Status</div>
+      </div>
+      <div class="tile"><div class="n" th:text="${client.n_total}">0</div><div class="label">Forms</div></div>
+      <div class="tile filed"><div class="n" th:text="${client.n_accepted}">0</div><div class="label">Accepted</div></div>
+      <div class="tile awaiting"><div class="n" th:text="${client.n_awaiting + client.n_batched}">0</div><div class="label">In flight</div></div>
+      <div class="tile attention"><div class="n" th:text="${client.n_rejected + client.n_blocked}">0</div><div class="label">Stopped</div></div>
+      <div class="tile">
+        <div class="n" style="font-size:1.25rem" th:text="'$' + ${client.accepted_display}">$0.00</div>
+        <div class="label">Accepted value</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================================== ATTENTION -->
+  <section th:if="${!attention.isEmpty()}">
+    <h2 th:text="'Needs a person — ' + ${attention.size()} + ' open'">Needs a person</h2>
+    <div class="panel">
+      <table>
+        <thead>
+        <tr>
+          <th style="width:2.6rem">Sev</th>
+          <th style="width:15rem">Condition</th>
+          <th style="width:9.5rem">First seen</th>
+          <th>What it means</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="a : ${attention}">
+          <td><span class="sev" th:classappend="'s' + ${a.severity}" th:text="${a.severity}">5</span></td>
+          <td class="mono" th:text="${a.code}">CODE</td>
+          <td class="dim" th:text="${a.first_seen_display}">—</td>
+          <td>
+            <span class="dim" th:text="${explain.get(a.code)}">…</span>
+            <details class="detail">
+              <summary th:text="${a.entity_type} + ' ' + ${a.entity_id}">entity</summary>
+              <pre th:text="${a.detail_text}">{}</pre>
+            </details>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ====================================================================== VENDORS -->
+  <section>
+    <h2>
+      Vendors
+      <span class="note" th:text="'— ' + ${vendors.size()} + ' with payments this year; expand any one for its payment-by-payment reasoning'">…</span>
+    </h2>
+
+    <p class="explain">
+      A vendor appears here whether or not a form is owed. That is deliberate: “no form
+      required” is a decision this system made and has to be able to defend, and a vendor
+      that simply vanished below the threshold would be indistinguishable from one that was
+      never imported.
+    </p>
+
+    <div class="panel">
+      <div class="empty" th:if="${vendors.isEmpty()}">
+        No determined vendors for this client and year. Run <span class="mono">determine</span>.
+      </div>
+
+      <details class="vendor" th:each="v : ${vendors}">
+        <summary>
+          <span>
+            <span class="name" th:text="${v.display_name}">Vendor</span>
+            <span class="dim mono" th:if="${v.tin_last4 != null}" th:text="'···' + ${v.tin_last4}">···1234</span>
+            <span class="badge stop" th:if="${v.tin_last4 == null}" th:text="${v.tin_status}">NO TIN</span>
+          </span>
+          <span>
+            <span class="badge yes" th:if="${v.form_required}">1099 DUE</span>
+            <span class="badge no"  th:unless="${v.form_required}">NO FORM</span>
+          </span>
+          <span>
+            <span class="badge stop" th:if="${v.transmit_blocked}">BLOCKED</span>
+            <span class="dim mono" th:if="${!v.transmit_blocked and v.filing_state != null}"
+                  th:text="${v.filing_state}">STATE</span>
+            <span class="dim" th:if="${!v.transmit_blocked and v.filing_state == null}">not filed</span>
+          </span>
+          <span class="amt" th:text="'$' + ${v.reportable_display}">$0.00</span>
+        </summary>
+
+        <div class="body">
+
+          <!--
+            The subtraction, always shown in full — including the lines that are zero.
+            Suppressing an exclusion because it happens to be $0.00 turns "we checked and
+            nothing was excluded for this reason" into "we did not consider this reason",
+            and those look identical on screen while meaning very different things.
+          -->
+          <table class="subtract">
+            <tr>
+              <td class="k">Gross paid to this vendor in <span th:text="${taxYear}">2025</span></td>
+              <td class="v" th:text="'$' + ${v.gross_display}">$0.00</td>
+              <td class="dim" th:text="${v.total_payment_count} + ' payment(s)'">…</td>
+            </tr>
+            <tr>
+              <td class="k">less card / third-party-network payments</td>
+              <td class="v" th:text="'−$' + ${v.card_display}">−$0.00</td>
+              <td class="dim">the processor reports these on a 1099-K</td>
+            </tr>
+            <tr>
+              <td class="k">less non-services spend</td>
+              <td class="v" th:text="'−$' + ${v.non_services_display}">−$0.00</td>
+              <td class="dim">rent, goods, merchandise</td>
+            </tr>
+            <tr>
+              <td class="k">less payments dated outside the tax year</td>
+              <td class="v" th:text="'−$' + ${v.out_of_year_display}">−$0.00</td>
+              <td class="dim">payment date governs, not invoice date</td>
+            </tr>
+            <tr>
+              <td class="k">net of reversals and refunds</td>
+              <td class="v" th:text="'−$' + ${v.reversal_display}">−$0.00</td>
+              <td class="dim">only where the original payment counted</td>
+            </tr>
+            <tr class="total">
+              <td class="k"><b>Box 1 — reportable</b></td>
+              <td class="v" th:text="'$' + ${v.reportable_display}">$0.00</td>
+              <td class="dim" th:text="${v.counted_payment_count} + ' payment(s) counted'">…</td>
+            </tr>
+            <tr th:if="${v.withholding_cents != 0}">
+              <td class="k"><b>Box 4 — federal income tax withheld</b></td>
+              <td class="v" th:text="'$' + ${v.withholding_display}">$0.00</td>
+              <td class="dim">amounts above are gross of this</td>
+            </tr>
+          </table>
+
+          <p class="explain" style="margin-top:0">
+            <b>Decision:</b>
+            <span th:text="${v.form_required} ? 'a 1099-NEC is required' : 'no 1099-NEC is required'">…</span>
+            <span class="mono" th:text="'(' + ${v.requirement_reason} + ')'">(REASON)</span>.
+            Identity established by <span class="mono" th:text="${v.identity_source}">SOURCE</span>.
+            <span th:if="${v.transmit_blocked}">
+              Transmission is blocked — the obligation stands and is counted; only the send is held.
+            </span>
+            <span th:if="${v.filing_state == 'SUBMITTED_UNACKNOWLEDGED'}">
+              Submitted; the IRS has not confirmed yet. This counts as filed on time.
+            </span>
+            <span th:if="${v.reject_code != null}" th:text="'IRS rejected with ' + ${v.reject_code} + '.'">…</span>
+            <span th:if="${v.irs_record_id != null}" class="mono"
+                  th:text="'IRS record ' + ${v.irs_record_id} + ' (attempt epoch ' + ${v.generation} + ')'">…</span>
+          </p>
+
+          <table th:with="rows=${paymentsByVendor.get(v.vendor_key)}">
+            <thead>
+            <tr>
+              <th style="width:6.5rem">Paid on</th>
+              <th style="width:8rem">Method</th>
+              <th style="width:6rem">Type</th>
+              <th class="num" style="width:7rem">Amount</th>
+              <th class="num" style="width:7rem">Counted</th>
+              <th>Why</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:if="${rows == null}"><td colspan="6" class="dim">No payment-level detail recorded.</td></tr>
+            <tr th:each="p : ${rows}" th:classappend="${p.counted} ? '' : ' excluded'">
+              <td class="mono">
+                <span th:text="${p.paid_on}">2025-01-01</span>
+                <!-- Flagged inline, because an out-of-year row in a list of in-year rows is
+                     otherwise indistinguishable at a glance from a date typo. -->
+                <span class="badge stop" th:if="${p.paid_in_year != taxYear}"
+                      th:text="${p.paid_in_year}">2024</span>
+              </td>
+              <td th:text="${p.method_canon}">check</td>
+              <td th:text="${p.entry_type}">PAYMENT</td>
+              <td class="num" th:text="'$' + ${p.amount_display}">$0.00</td>
+              <td class="num" th:text="${p.counted} ? '$' + ${p.counted_display} : '—'"
+                  th:classappend="${p.counted} ? '' : ' zero'">—</td>
+              <td>
+                <span th:text="${p.why}">reason</span>
+                <span class="dim" th:if="${p.memo != null}" th:text="' · ' + ${p.memo}"></span>
+              </td>
+            </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <p class="explain">
+    Read inside a single <span class="mono">REPEATABLE READ</span> transaction, so the
+    vendor totals and the payment lines under them describe the same instant.
+    Full TINs are never rendered on any page — only the last four digits, and only where a
+    person needs them to tell two vendors apart.
+  </p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<!--
+  The login form.
+
+  The identifier is username@firm-slug because usernames are unique PER FIRM, not globally
+  (app_user_name_uk in V1). Two firms may each employ a Sam, and a globally-unique login
+  name would quietly make one firm's namespace depend on another's — a constraint nobody
+  agreed to, discovered during someone's onboarding.
+
+  It is also the only place a firm is ever named by a human. Everything after this point
+  takes the firm from the authenticated principal, so there is no ?firm= parameter anywhere
+  in the application to tamper with.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — 1099 readiness</title>
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    .card { max-width: 27rem; margin: 3.5rem auto; background: var(--panel);
+            border: 1px solid var(--rule); border-radius: 3px; padding: 1.6rem 1.7rem 1.8rem; }
+    .card h1 { margin: 0 0 .3rem; font-size: 1.1rem; }
+    .card p.lede { margin: 0 0 1.3rem; color: var(--ink-soft); font-size: .85rem; }
+    label { display: block; font-size: .74rem; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--ink-soft); margin: .85rem 0 .25rem; font-weight: 700; }
+    input[type=text], input[type=password] {
+      width: 100%; padding: .48rem .6rem; border: 1px solid var(--rule);
+      border-radius: 3px; font: inherit; background: #fff;
+    }
+    button { margin-top: 1.3rem; width: 100%; padding: .55rem; font: inherit; font-weight: 600;
+             color: #fff; background: var(--ink); border: 0; border-radius: 3px; cursor: pointer; }
+    button:hover { background: #000; }
+    .msg { padding: .55rem .7rem; border-radius: 3px; font-size: .84rem; margin-bottom: 1rem; }
+    .msg.bad  { background: #fdeceb; border: 1px solid #e6b3af; color: var(--attention); }
+    .msg.info { background: #eaf1f9; border: 1px solid #b9cfe6; color: var(--ready); }
+    .fixtures { margin-top: 1.6rem; padding-top: 1rem; border-top: 1px solid var(--rule);
+                font-size: .78rem; color: var(--ink-soft); }
+    .fixtures code { background: #f3f4f6; padding: .05rem .25rem; border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="card">
+    <h1>1099-NEC filing readiness</h1>
+    <p class="lede">Sign in to see where the overnight run got to.</p>
+
+    <!--
+      One message for every failure. A form that distinguishes "no such firm" from "no such
+      user" from "wrong password" is a directory of who works where, queryable by anyone
+      who can reach the page.
+    -->
+    <div class="msg bad" th:if="${param.error}">
+      Those credentials were not accepted.
+    </div>
+    <div class="msg info" th:if="${param.get('logged-out') != null}">
+      Signed out.
+    </div>
+
+    <form method="post" th:action="@{/login}">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" autocomplete="username"
+             placeholder="name@firm-slug" autofocus required>
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+      <button type="submit">Sign in</button>
+    </form>
+
+    <div class="fixtures">
+      Development fixtures — password <code>readiness-dev</code> for all four:<br>
+      <code>dana@northstar</code> (admin) · <code>sam@northstar</code> (preparer)<br>
+      <code>priya@harborline</code> (admin) · <code>jordan@harborline</code> (preparer)<br><br>
+      Signing in as the two different firms is the quickest way to see isolation working:
+      the same URLs return entirely different data, with no filter applied anywhere in the
+      application code.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
